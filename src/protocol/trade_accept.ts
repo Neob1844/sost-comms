@@ -18,6 +18,10 @@ export interface TradeAccept {
   accepted_at: number;
   nonce: string;
   signature: string;
+
+  // Position trade fields (optional — only for position trades)
+  asset_type?: "GOLD" | "POSITION_FULL" | "POSITION_REWARD_RIGHT";
+  position_id?: string;
 }
 
 export function canonicalHash(accept: Omit<TradeAccept, "signature">): string {
@@ -33,6 +37,8 @@ export function canonicalHash(accept: Omit<TradeAccept, "signature">): string {
     accept.fill_amount_gold,
     accept.accepted_at,
     accept.nonce,
+    accept.asset_type ?? "",
+    accept.position_id ?? "",
   ];
   const raw = fields.map(f => String(f)).join("|");
   const { createHash } = require("crypto");
@@ -53,11 +59,13 @@ export function createAccept(params: {
   taker_eth_addr: string;
   fill_amount_sost: string;
   fill_amount_gold: string;
+  asset_type?: "GOLD" | "POSITION_FULL" | "POSITION_REWARD_RIGHT";
+  position_id?: string;
 }): Omit<TradeAccept, "signature"> {
   const { randomBytes } = require("crypto");
   const accept_id = randomBytes(8).toString("hex");
   const deal_id = deriveDealId(params.offer_id, accept_id);
-  return {
+  const base: Omit<TradeAccept, "signature"> = {
     version: 1,
     type: "trade_accept",
     accept_id,
@@ -70,4 +78,7 @@ export function createAccept(params: {
     accepted_at: Math.floor(Date.now() / 1000),
     nonce: randomBytes(16).toString("hex"),
   };
+  if (params.asset_type) base.asset_type = params.asset_type;
+  if (params.position_id) base.position_id = params.position_id;
+  return base;
 }
