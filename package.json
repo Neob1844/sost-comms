@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sign:offer": "ts-node scripts/create_signed_offer.ts",
+    "sign:accept": "ts-node scripts/create_signed_accept.ts"
   },
   "devDependencies": {
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
     "vitest": "^3.1.1"
   }
