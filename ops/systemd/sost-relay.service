@@ -1,0 +1,16 @@
+[Unit]
+Description=SOST E2E Relay Node
+After=network-online.target
+
+[Service]
+Type=simple
+User=sost
+WorkingDirectory=/home/sost/SOST/sost-comms-private
+ExecStart=/usr/bin/npx ts-node src/relay/http_api.ts
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

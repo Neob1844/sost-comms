@@ -5,11 +5,18 @@
  * No Express dependency.
  *
  * Endpoints:
- *   POST /submit        — submit a signed message
- *   GET  /deals         — list active deals
- *   GET  /deals/:id     — get deal history
- *   GET  /offers        — list open offers
- *   GET  /health        — relay status
+ *   POST /submit              — submit a signed message (plaintext)
+ *   POST /submit/encrypted    — submit an encrypted envelope (blind transport)
+ *   GET  /deals               — list active deals
+ *   GET  /deals/:id           — get deal history (plaintext)
+ *   GET  /deals/:id/encrypted — get encrypted messages for a deal
+ *   GET  /offers              — list open offers
+ *   GET  /health              — relay status
+ *   POST /prekeys/:identity   — publish prekey bundle
+ *   GET  /prekeys/:identity   — fetch prekey bundle
+ *   GET  /pending/:recipientId — fetch pending offline messages
+ *   POST /ack/:messageId      — acknowledge delivery
+ *   GET  /delivery/:dealId    — get delivery status for deal
  */
 
 import * as http from "http";
@@ -76,10 +83,29 @@ export function createHttpHandler(relay: RelayNode) {
         return jsonResponse(res, status, result);
       }
 
+      // POST /submit/encrypted
+      if (method === "POST" && url === "/submit/encrypted") {
+        const raw = await readBody(req);
+        const envelope = JSON.parse(raw);
+        const result = relay.submitEncrypted(envelope);
+        const status = result.accepted ? 200 : 400;
+        return jsonResponse(res, status, result);
+      }
+
       // GET /deals
       if (method === "GET" && url === "/deals") {
         const deals = relay.listDeals();
         return jsonResponse(res, 200, { deals });
+      }
+
+      // GET /deals/:id/encrypted
+      if (method === "GET" && url.match(/^\/deals\/[^/]+\/encrypted$/)) {
+        const dealId = url.slice("/deals/".length, url.lastIndexOf("/encrypted"));
+        if (!dealId) {
+          return jsonResponse(res, 400, { error: "missing deal_id" });
+        }
+        const messages = relay.getEncryptedDealMessages(dealId);
+        return jsonResponse(res, 200, { deal_id: dealId, messages });
       }
 
       // GET /deals/:id
@@ -105,6 +131,46 @@ export function createHttpHandler(relay: RelayNode) {
           deals: relay.listDeals().length,
           offers: relay.getOffers().length,
         });
+      }
+
+      // POST /prekeys/:identity
+      if (method === "POST" && url.match(/^\/prekeys\/[^/]+$/)) {
+        const identity = url.slice("/prekeys/".length);
+        const raw = await readBody(req);
+        const bundle = JSON.parse(raw);
+        relay.publishPrekeyBundle(identity, bundle);
+        return jsonResponse(res, 200, { published: true, identity });
+      }
+
+      // GET /prekeys/:identity
+      if (method === "GET" && url.match(/^\/prekeys\/[^/]+$/)) {
+        const identity = url.slice("/prekeys/".length);
+        const bundle = relay.getPrekeyBundle(identity);
+        if (!bundle) {
+          return jsonResponse(res, 404, { error: "no prekey bundle for identity" });
+        }
+        return jsonResponse(res, 200, { identity, bundle });
+      }
+
+      // GET /pending/:recipientId
+      if (method === "GET" && url.match(/^\/pending\/[^/]+$/)) {
+        const recipientId = url.slice("/pending/".length);
+        const pending = relay.fetchPending(recipientId);
+        return jsonResponse(res, 200, { recipient_id: recipientId, messages: pending });
+      }
+
+      // POST /ack/:messageId
+      if (method === "POST" && url.match(/^\/ack\/[^/]+$/)) {
+        const messageId = url.slice("/ack/".length);
+        relay.acknowledgeMessage(messageId);
+        return jsonResponse(res, 200, { acknowledged: true, message_id: messageId });
+      }
+
+      // GET /delivery/:dealId
+      if (method === "GET" && url.match(/^\/delivery\/[^/]+$/)) {
+        const dealId = url.slice("/delivery/".length);
+        const statuses = relay.getDeliveryStatus(dealId);
+        return jsonResponse(res, 200, { deal_id: dealId, statuses });
       }
 
       // 404
